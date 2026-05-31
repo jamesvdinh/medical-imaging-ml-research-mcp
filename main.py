@@ -34,9 +34,12 @@ Registering with Claude Code (project-level):
     claude mcp add medical-imaging-research -- uv run main.py
 """
 
+from server.src.mcp.server import mcp
 import os
 
-from server.src.mcp.server import mcp
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def main() -> None:

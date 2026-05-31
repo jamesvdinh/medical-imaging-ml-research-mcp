@@ -126,7 +126,7 @@ async def search_papers(query: str, limit: int = 10) -> str:
 
     Args:
         query: Free-text search query (e.g., "transformer segmentation MRI 2023").
-        limit: Number of results to return (1–100, default 10).
+        limit: Number of results to return (1-100, default 10).
     """
     data = await client.search_papers(query=query, limit=limit)
     return _format_paper_list(data)
@@ -148,12 +148,12 @@ async def search_medical_imaging(
     Available topics:
         segmentation, classification, detection, reconstruction, registration,
         generation, mri, ct, xray, ultrasound, pathology, fundus, dermoscopy,
-        pet, endoscopy
+        pet, endoscopy, umap
 
     Args:
         topic:       One of the topic keys listed above.
         extra_query: Additional keywords appended to the topic seed (optional).
-        limit:       Number of results to return (1–100, default 10).
+        limit:       Number of results to return (1-100, default 10).
     """
     seed = MEDICAL_IMAGING_TOPICS.get(topic.lower())
     if seed is None:

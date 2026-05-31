@@ -2,16 +2,6 @@
 Semantic Scholar API client.
 
 Design choices:
-  - Single shared httpx.AsyncClient: created once at construction, reused for
-    all requests. This keeps HTTP connections alive across calls (connection
-    pooling) and is far cheaper than opening a new connection per tool call.
-    Call aclose() during server shutdown to drain the connection pool cleanly.
-
-  - In-memory TTL cache (_Cache): avoids hitting the API twice for the same
-    query in one session. The cache key is (url, sorted params), which is
-    deterministic for identical tool calls regardless of dict ordering.
-    No external dependency (Redis, diskcache) needed for a local MCP server.
-
   - Structured error returns: rather than raising exceptions that FastMCP
     would swallow into opaque errors, failed requests return a dict with an
     "error" key. Tool functions can then surface a useful message to the LLM.
@@ -21,6 +11,7 @@ Design choices:
     per tool call.
 """
 
+import asyncio
 import time
 from typing import Any
 
@@ -33,7 +24,11 @@ RECOMMENDATIONS_BASE = "https://api.semanticscholar.org/recommendations/v1"
 
 
 class _Cache:
-    """Minimal TTL cache backed by a plain dict. Thread-safe for asyncio single-threaded use."""
+    """Minimal TTL cache backed by a plain dict. Thread-safe for asyncio single-threaded use.
+        - In-memory TTL cache (_Cache): avoids hitting the API twice for the same query in one
+        session. The cache key is (url, sorted params), which is deterministic for identical tool calls regardless of dict ordering.
+        - No external dependency (Redis, diskcache) needed for a local MCP server.
+    """
 
     def __init__(self, ttl: int) -> None:
         self._ttl = ttl
@@ -50,6 +45,14 @@ class _Cache:
 
 
 class SemanticScholarClient:
+    """
+        - Single shared httpx.AsyncClient: created once at construction, reused for
+        all requests. This keeps HTTP connections alive across calls (connection
+        pooling) and is far cheaper than opening a new connection per tool call.
+        Call aclose() during server shutdown to drain the connection pool cleanly.
+
+    """
+
     def __init__(self, config: Config) -> None:
         headers: dict[str, str] = {
             "User-Agent": "medical-imaging-mcp/1.0",
@@ -63,6 +66,9 @@ class SemanticScholarClient:
             timeout=config.request_timeout_seconds,
         )
         self._cache = _Cache(ttl=config.cache_ttl_seconds)
+        self._rate_interval = config.request_interval_seconds
+        self._last_request_at: float = 0.0
+        self._rate_lock = asyncio.Lock()
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -78,6 +84,12 @@ class SemanticScholarClient:
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
+
+        async with self._rate_lock:
+            elapsed = time.monotonic() - self._last_request_at
+            if elapsed < self._rate_interval:
+                await asyncio.sleep(self._rate_interval - elapsed)
+            self._last_request_at = time.monotonic()
 
         try:
             res = await self._client.get(url, params=params)
@@ -162,7 +174,8 @@ class SemanticScholarClient:
         limit: int = 10,
     ) -> dict[str, Any]:
         """Papers referenced by the given paper (backward citations)."""
-        ref_fields = [f"citedPaper.{f}" for f in (fields or DEFAULT_PAPER_FIELDS)]
+        ref_fields = [f"citedPaper.{f}" for f in (
+            fields or DEFAULT_PAPER_FIELDS)]
         return await self._get(
             f"{API_BASE}/paper/{paper_id}/references",
             params={

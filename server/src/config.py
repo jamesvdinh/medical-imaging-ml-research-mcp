@@ -25,6 +25,7 @@ class Config:
     cache_ttl_seconds: int
     max_results_default: int
     request_timeout_seconds: float
+    request_interval_seconds: float
 
 
 def load_config() -> Config:
@@ -32,7 +33,10 @@ def load_config() -> Config:
         api_key=os.getenv("SEMANTIC_SCHOLAR_API_KEY"),
         cache_ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "300")),
         max_results_default=int(os.getenv("MAX_RESULTS_DEFAULT", "10")),
-        request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS", "30.0")),
+        request_timeout_seconds=float(
+            os.getenv("REQUEST_TIMEOUT_SECONDS", "30.0")),
+        request_interval_seconds=float(
+            os.getenv("REQUEST_INTERVAL_SECONDS", "1.0")),
     )
 
 
@@ -86,4 +90,5 @@ MEDICAL_IMAGING_TOPICS: dict[str, str] = {
     "dermoscopy": "dermoscopy skin lesion classification segmentation",
     "pet": "PET scan image analysis deep learning oncology",
     "endoscopy": "endoscopy polyp detection segmentation deep learning",
+    "umap": "UMAP dimensionality reduction visualization medical imaging",
 }
